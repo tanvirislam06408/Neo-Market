@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config()
 
 
@@ -33,12 +33,47 @@ async function run() {
     await client.connect();
     const database = client.db("monkey")
     const productsCollection = database.collection("products");
-   
-    app.get('/api/products',async(req,res)=>{
-      const result=await productsCollection.find().toArray()
+    const ordersCollection = database.collection("orders");
+
+    app.get('/api/products', async (req, res) => {
+      const result = await productsCollection.find().toArray()
       res.send(result);
     })
 
+    // get single product by id
+
+    app.get('/api/product/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = {
+        _id: new ObjectId(id)
+      }
+      const result = await productsCollection.findOne(query);
+      res.send(result)
+
+    })
+
+    // buying infos and metadata
+    app.post('/api/order', async (req, res) => {
+      const data = req.body;
+      const existQuery = {
+        transactionId : data.transactionId
+      }
+      
+      const isExist = await ordersCollection.findOne(existQuery);
+
+      if (isExist) {
+        return res.json({ meg: 'order is already in pending' });
+      }
+      console.log(data);
+      const result = await ordersCollection.insertOne(data)
+      res.send(result)
+    })
+
+    // get featured products
+    app.get('/api/featuredProduct',async(req,res)=>{
+      const result=await productsCollection.find().limit(4).toArray()
+      res.send(result);
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
@@ -56,12 +91,12 @@ run().catch(console.dir);
 
 
 
-app.get('/',(req,res)=>{
-    res.send('server is getting colder')
+app.get('/', (req, res) => {
+  res.send('server is getting colder')
 })
 
 
-app.listen(port,()=>{
-    console.log(`server is running on ${port}`);
-    
+app.listen(port, () => {
+  console.log(`server is running on ${port}`);
+
 })
