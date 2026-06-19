@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const { createRemoteJWKSet, jwtVerify } = require('jose-cjs');
 require('dotenv').config()
 
 
@@ -27,6 +28,38 @@ const client = new MongoClient(uri, {
   }
 });
 
+
+
+
+
+const JWKS = createRemoteJWKSet(new URL(`${process.env.NEXT_CLIENT_SITE}/api/auth/jwks`))
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers?.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer")) {
+    res.status(401).send({ message: 'unauthorize' })
+  }
+  const token = authHeader.split(" ")[1]
+  if (!token) {
+    res.status(401).send({ message: 'unauthorize' })
+  }
+
+ try{
+  const {payload}=await jwtVerify(token,JWKS);
+  console.log(payload);
+  next()
+  
+ }
+ catch(err){
+  console.log(err);
+   res.status(401).send({ message: 'unauthorize' })
+ }
+
+
+
+}
+
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
@@ -39,14 +72,21 @@ async function run() {
 
 
     app.get('/api/products', async (req, res) => {
-      const { page = 1, limit = 5 } = req.query;
+
+      const query = {
+
+      }
+      if (req.query.category) {
+        query.category = req.query.category
+      }
+
+      const { page = 1, limit = 8 } = req.query;
       const skip = (Number(page) - 1) * Number(limit)
-      const result = await productsCollection.find().skip(skip).limit(Number(limit)).toArray()
-      const totalData =await productsCollection.countDocuments();
+      const result = await productsCollection.find(query).skip(skip).limit(Number(limit)).toArray()
+      const totalData = await productsCollection.countDocuments();
       const totalPage = Math.ceil(totalData / Number(limit))
-      console.log(totalData);
-      
-      res.send({products:result, page: Number(page),totalPage });
+
+      res.send({ products: result, page: Number(page), totalPage });
     })
 
     // get single product by id
@@ -126,7 +166,7 @@ async function run() {
 
     // get orders data
 
-    app.get('/api/orders', async (req, res) => {
+    app.get('/api/orders', verifyToken, async (req, res) => {
       const query = {
 
       }
@@ -139,7 +179,22 @@ async function run() {
       res.send(result);
     })
 
+    app.delete('/api/orders', async (req, res) => {
+      const query = {
 
+      }
+
+      const productId = req?.query?.productId
+
+      if (req.query.productId) {
+        query._id = new ObjectId(productId)
+      }
+      console.log('quear', query);
+
+      const result = await ordersCollection.deleteOne(query);
+      res.send(result)
+
+    })
 
 
 
