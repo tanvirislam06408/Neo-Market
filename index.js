@@ -36,29 +36,41 @@ const JWKS = createRemoteJWKSet(new URL(`${process.env.NEXT_CLIENT_SITE}/api/aut
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers?.authorization;
+  
   if (!authHeader || !authHeader.startsWith("Bearer")) {
-    res.status(401).send({ message: 'unauthorize' })
+    return res.status(401).send({ message: 'unauthorize' })
   }
   const token = authHeader.split(" ")[1]
+  
   if (!token) {
-    res.status(401).send({ message: 'unauthorize' })
+    return res.status(401).send({ message: 'unauthorize' })
   }
 
- try{
-  const {payload}=await jwtVerify(token,JWKS);
-  console.log(payload);
-  next()
-  
- }
- catch(err){
-  console.log(err);
-   res.status(401).send({ message: 'unauthorize' })
- }
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    req.user=payload
+    next()
+
+  }
+  catch (err) {
+    console.log(err);
+    res.status(401).send({ message: 'unauthorize' })
+  }
 
 
 
 }
 
+
+const verifyBuyer = async (req,res,next) => {
+  console.log(req);
+  
+  if(!req.user.role === 'buyer' ){
+    return res.status(403).send({ message: 'Forbidden' })
+  }
+
+  next();
+}
 
 async function run() {
   try {
@@ -144,7 +156,7 @@ async function run() {
 
 
     // get wish-list data
-    app.get('/api/wish-list', async (req, res) => {
+    app.get('/api/wish-list',verifyToken,verifyBuyer, async (req, res) => {
       const query = {
 
       }
@@ -202,7 +214,7 @@ async function run() {
 
     // delete wishlist items
 
-    app.delete('/api/wish-list', async (req, res) => {
+    app.delete('/api/wish-list',verifyToken,verifyBuyer, async (req, res) => {
       const id = req.query?._id
       const query = {
         _id: id
