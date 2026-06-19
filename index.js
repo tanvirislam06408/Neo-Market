@@ -34,10 +34,19 @@ async function run() {
     const database = client.db("monkey")
     const productsCollection = database.collection("products");
     const ordersCollection = database.collection("orders");
+    const wishListCollection = database.collection("wish-list");
+
+
 
     app.get('/api/products', async (req, res) => {
-      const result = await productsCollection.find().toArray()
-      res.send(result);
+      const { page = 1, limit = 5 } = req.query;
+      const skip = (Number(page) - 1) * Number(limit)
+      const result = await productsCollection.find().skip(skip).limit(Number(limit)).toArray()
+      const totalData =await productsCollection.countDocuments();
+      const totalPage = Math.ceil(totalData / Number(limit))
+      console.log(totalData);
+      
+      res.send({products:result, page: Number(page),totalPage });
     })
 
     // get single product by id
@@ -56,24 +65,106 @@ async function run() {
     app.post('/api/order', async (req, res) => {
       const data = req.body;
       const existQuery = {
-        transactionId : data.transactionId
+        transactionId: data.transactionId
       }
-      
+
       const isExist = await ordersCollection.findOne(existQuery);
 
       if (isExist) {
         return res.json({ meg: 'order is already in pending' });
       }
-      console.log(data);
-      const result = await ordersCollection.insertOne(data)
+
+      const updatedData = {
+        ...data,
+        createdAt: new Date()
+      }
+      const result = await ordersCollection.insertOne(updatedData)
       res.send(result)
     })
 
-    // get featured products
-    app.get('/api/featuredProduct',async(req,res)=>{
-      const result=await productsCollection.find().limit(4).toArray()
+
+    // post data in wishlist
+    app.post('/api/wish-list', async (req, res) => {
+      const data = req.body;
+      const id = data._id
+
+      const existQuery = {
+        _id: id
+      }
+
+      const isExist = await wishListCollection.findOne(existQuery);
+
+
+      if (isExist) {
+        return res.json({ meg: 'Product is already in WishList' });
+      }
+      const result = await wishListCollection.insertOne(data);
       res.send(result);
     })
+
+
+    // get wish-list data
+    app.get('/api/wish-list', async (req, res) => {
+      const query = {
+
+      }
+      if (req.query) {
+        query.userId = req.query.userId
+      }
+      const result = await wishListCollection.find(query).toArray();
+      res.send(result);
+
+    })
+
+    // get featured products
+    app.get('/api/featuredProduct', async (req, res) => {
+      const result = await productsCollection.find().limit(4).toArray()
+      res.send(result);
+    })
+
+
+
+    // get orders data
+
+    app.get('/api/orders', async (req, res) => {
+      const query = {
+
+      }
+
+      const userId = req?.query?.userId
+      if (req.query.userId) {
+        query['buyerInfo.user'] = userId
+      }
+      const result = await ordersCollection.find(query).toArray()
+      res.send(result);
+    })
+
+
+
+
+
+
+
+    // delete wishlist items
+
+    app.delete('/api/wish-list', async (req, res) => {
+      const id = req.query?._id
+      const query = {
+        _id: id
+      }
+
+      const result = await wishListCollection.deleteOne(query);
+      res.send(result);
+    })
+
+
+
+
+
+
+
+
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
