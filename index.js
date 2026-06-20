@@ -36,24 +36,24 @@ const JWKS = createRemoteJWKSet(new URL(`${process.env.NEXT_CLIENT_SITE}/api/aut
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers?.authorization;
-  
+
   if (!authHeader || !authHeader.startsWith("Bearer")) {
     return res.status(401).send({ message: 'unauthorize' })
   }
   const token = authHeader.split(" ")[1]
-  
+
   if (!token) {
     return res.status(401).send({ message: 'unauthorize' })
   }
 
   try {
     const { payload } = await jwtVerify(token, JWKS);
-    req.user=payload
+    req.user = payload
     next()
 
   }
   catch (err) {
-    console.log(err);
+
     res.status(401).send({ message: 'unauthorize' })
   }
 
@@ -62,10 +62,21 @@ const verifyToken = async (req, res, next) => {
 }
 
 
-const verifyBuyer = async (req,res,next) => {
-  console.log(req);
-  
-  if(!req.user.role === 'buyer' ){
+const verifyBuyer = async (req, res, next) => {
+
+
+  if (!req.user.role === 'buyer') {
+    return res.status(403).send({ message: 'Forbidden' })
+  }
+
+  next();
+}
+
+// verify seller
+const verifySeller = async (req, res, next) => {
+
+
+  if (!req.user.role === 'seller') {
     return res.status(403).send({ message: 'Forbidden' })
   }
 
@@ -113,6 +124,119 @@ async function run() {
 
     })
 
+    // post products
+    app.post('/api/products', verifyToken, async (req, res) => {
+      const data = req.body;
+      const result = await productsCollection.insertOne(data);
+      res.send(result);
+    })
+
+
+    // get seller information
+    app.get('/api/seller', verifyToken,verifySeller, async (req, res) => {
+      const id = req.query?.id;
+      const query = {};
+
+      if (id) {
+        query["sellerInfo.userId"] = id;
+      }
+
+      const totalProducts = await productsCollection.countDocuments(query);
+      const totalSales = await ordersCollection.countDocuments(query);
+      const totalOrders=await ordersCollection.countDocuments(query);
+
+      const [stats] = await ordersCollection.aggregate([
+        { $match: query },
+        {
+          $group: {
+            _id: null,
+            totalSales: { $sum: 1 },
+            totalRevenue: { $sum: "$price" },
+            pendingOrders: {
+              $sum: {
+                $cond: [{ $eq: ["$orderStatus", "processing"] }, 1, 0],
+              },
+            },
+            processingOrders: {
+              $sum: {
+                $cond: [{ $eq: ["$orderStatus", "pending"] }, 1, 0],
+              },
+            },
+
+            deliveredOrders: {
+              $sum: {
+                $cond: [{ $eq: ["$orderStatus", "delivered"] }, 1, 0],
+              },
+            },
+          },
+        },
+      ]).toArray();
+
+      res.send({
+        totalProducts,
+        totalSales: stats?.totalSales || 0,
+        totalRevenue: stats?.totalRevenue || 0,
+        totalOrders,
+        pendingOrders: stats?.pendingOrders || 0,
+        processingOrders: stats?.processingOrders || 0,
+        deliveredOrders: stats?.deliveredOrders || 0,
+      });
+    });
+
+    // get seller uploaded product
+    app.get('/api/seller-product', verifyToken, async (req, res) => {
+      const query = {
+
+      }
+      if (req.query.id) {
+        query["sellerInfo.userId"] = req.query.id;
+      }
+      const result = await productsCollection.find(query).toArray();
+      res.send(result)
+    })
+
+    // update seller product
+    app.patch('/api/seller-edit', verifyToken, verifySeller, async (req, res) => {
+      try {
+        const id = req.query.id;
+
+        if (!id) {
+          return res.status(400).json({ message: "Product id is required" });
+        }
+
+        const { title, category, condition, price, description, status } = req.body;
+
+        const updatedDoc = {
+          $set: {
+            title,
+            category,
+            condition,
+            price: Number(price),
+            description,
+            status,
+          },
+        };
+
+        const result = await productsCollection.updateOne(
+          { _id: new ObjectId(id) },
+          updatedDoc
+        );
+
+        if (result.modifiedCount === 0) {
+          return res.status(404).json({ message: "No product updated" });
+        }
+
+        res.send({
+          success: true,
+          message: "Product updated successfully",
+          result,
+        });
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Server error" });
+      }
+    });
+
     // buying infos and metadata
     app.post('/api/order', async (req, res) => {
       const data = req.body;
@@ -133,6 +257,32 @@ async function run() {
       const result = await ordersCollection.insertOne(updatedData)
       res.send(result)
     })
+
+    // delete seller products
+    app.delete('/api/seller-delete', async (req, res) => {
+      try {
+        const id = req.query.id;
+        if (!id) {
+          return res.status(400).json({ message: "product id is required" })
+        }
+        const query = {
+          _id: new ObjectId(id)
+        }
+
+        const result = await productsCollection.deleteOne(query);
+        res.send(result)
+
+      }
+      catch (err) {
+        console.log(err)
+        res.send('server problem')
+
+      }
+    })
+
+
+
+
 
 
     // post data in wishlist
@@ -156,7 +306,7 @@ async function run() {
 
 
     // get wish-list data
-    app.get('/api/wish-list',verifyToken,verifyBuyer, async (req, res) => {
+    app.get('/api/wish-list', verifyToken, verifyBuyer, async (req, res) => {
       const query = {
 
       }
@@ -191,6 +341,7 @@ async function run() {
       res.send(result);
     })
 
+    // delete orders
     app.delete('/api/orders', async (req, res) => {
       const query = {
 
@@ -201,7 +352,7 @@ async function run() {
       if (req.query.productId) {
         query._id = new ObjectId(productId)
       }
-      console.log('quear', query);
+
 
       const result = await ordersCollection.deleteOne(query);
       res.send(result)
@@ -214,7 +365,7 @@ async function run() {
 
     // delete wishlist items
 
-    app.delete('/api/wish-list',verifyToken,verifyBuyer, async (req, res) => {
+    app.delete('/api/wish-list', verifyToken, verifyBuyer, async (req, res) => {
       const id = req.query?._id
       const query = {
         _id: id
