@@ -86,7 +86,7 @@ const verifySeller = async (req, res, next) => {
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
+    // await client.connect();
     const database = client.db("monkey")
     const productsCollection = database.collection("products");
     const ordersCollection = database.collection("orders");
@@ -133,7 +133,7 @@ async function run() {
 
 
     // get seller information
-    app.get('/api/seller', verifyToken,verifySeller, async (req, res) => {
+    app.get('/api/seller', verifyToken, verifySeller, async (req, res) => {
       const id = req.query?.id;
       const query = {};
 
@@ -143,7 +143,7 @@ async function run() {
 
       const totalProducts = await productsCollection.countDocuments(query);
       const totalSales = await ordersCollection.countDocuments(query);
-      const totalOrders=await ordersCollection.countDocuments(query);
+      const totalOrders = await ordersCollection.countDocuments(query);
 
       const [stats] = await ordersCollection.aggregate([
         { $match: query },
@@ -259,7 +259,7 @@ async function run() {
     })
 
     // delete seller products
-    app.delete('/api/seller-delete', async (req, res) => {
+    app.delete('/api/seller-delete', verifyToken, verifySeller, async (req, res) => {
       try {
         const id = req.query.id;
         if (!id) {
@@ -280,19 +280,67 @@ async function run() {
       }
     })
 
+    // get seller orders
+    app.get('/api/seller-orders', verifyToken, verifySeller, async (req, res) => {
+      try {
+        const id = req.query.sellerId;
+        if (!id) {
+          return res.status(400).json({ message: "product id is required" })
+        }
+        const query = {
+
+        }
+        if (id) {
+          query["sellerInfo.userId"] = id
+        }
 
 
+        const result = await ordersCollection.find(query).toArray();
+        res.send(result);
 
+      }
+      catch (err) {
+        console.log(err)
+        res.send('server problem')
+
+      }
+    })
+
+    // update order status
+    app.patch('/seller-order-status', verifyToken, verifySeller, async (req, res) => {
+      const id = req.query.id;
+      const status = req.query.orderStatus;
+      console.log(id, status);
+
+      if (!id) {
+        return res.status(400).json({ message: "Order id is required" })
+      }
+      const query = {
+
+      }
+      if (id) {
+        query._id = new ObjectId(id)
+      }
+      const updateDoc = {
+        $set: {
+          orderStatus: status
+        }
+      }
+      const result = await ordersCollection.updateOne(query, updateDoc)
+      res.send(result);
+    })
 
 
     // post data in wishlist
     app.post('/api/wish-list', async (req, res) => {
       const data = req.body;
       const id = data._id
+      console.log(data);
 
       const existQuery = {
-        _id: id
-      }
+        userId: data.userId,
+        productId: data.productId
+      };
 
       const isExist = await wishListCollection.findOne(existQuery);
 
@@ -385,7 +433,7 @@ async function run() {
 
 
     // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
