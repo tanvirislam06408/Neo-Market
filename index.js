@@ -99,9 +99,28 @@ async function run() {
       const query = {
 
       }
+
       if (req.query.category) {
         query.category = req.query.category
       }
+
+      if (req.query.search) {
+        query.$or = [
+          {
+            title: {
+              $regex: req.query.search,
+              $options: "i", // case-insensitive
+            },
+          },
+          {
+            category: {
+              $regex: req.query.search,
+              $options: "i",
+            },
+          },
+        ];
+      }
+
 
       const { page = 1, limit = 8 } = req.query;
       const skip = (Number(page) - 1) * Number(limit)
@@ -125,7 +144,7 @@ async function run() {
     })
 
     // post products
-    app.post('/api/products', verifyToken, async (req, res) => {
+    app.post('/api/products', verifyToken, verifySeller, async (req, res) => {
       const data = req.body;
       const result = await productsCollection.insertOne(data);
       res.send(result);
@@ -183,17 +202,47 @@ async function run() {
       });
     });
 
-    // get seller uploaded product
-    app.get('/api/seller-product', verifyToken, async (req, res) => {
-      const query = {
 
+
+
+    app.get('/api/seller-product', verifyToken, async (req, res) => {
+      try {
+        const query = {};
+
+        // seller products
+        if (req.query.id) {
+          query["sellerInfo.userId"] = req.query.id;
+        }
+
+        // search by title
+        if (req.query.search) {
+          query.title = {
+            $regex: req.query.search,
+            $options: "i",
+          };
+        }
+
+        // filter by status
+        if (req.query.status && req.query.status !== "all") {
+          query.status = req.query.status;
+        }
+
+        let cursor = productsCollection.find(query);
+
+        // sort by category
+        if (req.query.category && req.query.category !== "all") {
+          query.category = req.query.category;
+        }
+
+        const result = await cursor.toArray();
+
+        res.send(result);
+      } catch (err) {
+        console.log(err);
+        res.status(500).send({ message: "Server error" });
       }
-      if (req.query.id) {
-        query["sellerInfo.userId"] = req.query.id;
-      }
-      const result = await productsCollection.find(query).toArray();
-      res.send(result)
-    })
+    });
+
 
     // update seller product
     app.patch('/api/seller-edit', verifyToken, verifySeller, async (req, res) => {
