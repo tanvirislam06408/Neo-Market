@@ -334,8 +334,6 @@ async function run() {
     // post data in wishlist
     app.post('/api/wish-list', async (req, res) => {
       const data = req.body;
-      const id = data._id
-      console.log(data);
 
       const existQuery = {
         userId: data.userId,
@@ -416,7 +414,7 @@ async function run() {
     app.delete('/api/wish-list', verifyToken, verifyBuyer, async (req, res) => {
       const id = req.query?._id
       const query = {
-        _id: id
+        _id: new ObjectId(id)
       }
 
       const result = await wishListCollection.deleteOne(query);
