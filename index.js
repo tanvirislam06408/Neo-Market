@@ -463,6 +463,14 @@ async function run() {
       res.send(result);
     })
 
+
+    // all-payments
+    app.get('/all-payments',verifyToken,verifyAdmin,  async (req, res) => {
+      const result = await ordersCollection.find().toArray()
+      res.send(result)
+    })
+
+
     // delete orders
     app.delete('/api/orders', async (req, res) => {
       const query = {
