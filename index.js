@@ -110,6 +110,20 @@ async function run() {
       const query = {
 
       }
+      let sortQuery = {
+
+      }
+      console.log(req.query);
+
+      const sort = req.query.sort
+      if (req.query.sort) {
+        if (sort === "highToLow") {
+          sortQuery = { price: - 1 }
+        }
+        else {
+          sortQuery = { price: 1 }
+        }
+      }
 
       if (req.query.category) {
         query.category = req.query.category
@@ -135,7 +149,9 @@ async function run() {
 
       const { page = 1, limit = 8 } = req.query;
       const skip = (Number(page) - 1) * Number(limit)
-      const result = await productsCollection.find(query).skip(skip).limit(Number(limit)).toArray()
+
+      const result = await productsCollection.find(query).sort(sortQuery).skip(skip).limit(Number(limit)).toArray()
+
       const totalData = await productsCollection.countDocuments();
       const totalPage = Math.ceil(totalData / Number(limit))
 
@@ -556,13 +572,13 @@ async function run() {
 
       }
       if (!req.query.id) {
-        return res.status(400).json({message: "id is required for delete user"})
+        return res.status(400).json({ message: "id is required for delete user" })
       }
       if (req.query.id) {
         query._id = new ObjectId(req.query.id)
       }
 
-      const result=await userCollection.deleteOne(query);
+      const result = await userCollection.deleteOne(query);
       res.send(result);
 
     })
@@ -580,12 +596,70 @@ async function run() {
     })
 
 
+    // delete product by admin
+    app.delete('/delete-product', verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.query.id
+      console.log(id);
+      if (!id) {
+        return res.status(400).json({ message: "product id is required for delete" })
+
+      }
+      const query = {
+
+      }
+      if (id) {
+        query._id = new ObjectId(id)
+      }
+      const result = await productsCollection.deleteOne(query);
+
+      res.send(result);
+    })
 
 
+    app.patch('/updateStatus', verifyToken, verifyAdmin, async (req, res) => {
+      const { id, status } = req.body
+      console.log(req.body);
+
+      console.log(id);
+      if (!id) {
+        return res.status(400).json({ message: "product id is required for delete" })
+
+      }
+      const query = {
+
+      }
+      if (id) {
+        query._id = new ObjectId(id)
+      }
+      const updatedDoc = {
+        $set: {
+          status: status
+        }
+      }
+      const result = await productsCollection.updateOne(query, updatedDoc);
+      res.send(result)
+    })
 
 
+    app.get('/all-orders', verifyToken, verifyAdmin, async (req, res) => {
+      const result = await ordersCollection.find().toArray();
+      res.send(result);
+    })
 
-
+    // update order status
+    app.patch('/update-order-status', verifyToken, verifyAdmin, async (req, res) => {
+      const { id, data } = req.body
+      const filter = {
+        _id: new ObjectId(id)
+      }
+      const updatedDoc = {
+        $set: {
+          orderStatus: data
+        }
+      }
+      const result = await ordersCollection.updateOne(filter, updatedDoc);
+      res.send(result);
+    })
 
 
     // Send a ping to confirm a successful connection
