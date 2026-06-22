@@ -1,6 +1,4 @@
-# Neo-market backend
 
-Simple Node.js backend for the Last Exam project.
 
 ## Overview
 
